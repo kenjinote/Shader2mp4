@@ -16,7 +16,6 @@
 #include <shlwapi.h>
 #include <gdiplus.h>
 #include <richedit.h>
-#include <math.h>
 #include <GL/glew.h>
 #include <GL/glut.h>
 
@@ -248,28 +247,10 @@ inline VOID DrawGLScene(GLfloat time)
 	glUseProgram(0);
 	glFlush();
 	SwapBuffers(hDC);
-	//BITMAPINFO bitmapInfo;
-	//::memset(&bitmapInfo, 0, sizeof(BITMAPINFO));
-	//bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	//bitmapInfo.bmiHeader.biPlanes = 1;
-	//bitmapInfo.bmiHeader.biBitCount = 32;
-	//bitmapInfo.bmiHeader.biCompression = BI_RGB;
-	//bitmapInfo.bmiHeader.biWidth = PREVIEW_WIDTH;
-	//bitmapInfo.bmiHeader.biHeight = PREVIEW_HEIGHT;
-	//bitmapInfo.bmiHeader.biSizeImage = PREVIEW_WIDTH * PREVIEW_HEIGHT * 4;
-	//void *bmBits = 0;
-	//HDC memDC = CreateCompatibleDC(hdc);
-	//HBITMAP memBM = CreateDIBSection(0, &bitmapInfo, DIB_RGB_COLORS, &bmBits, 0, 0);
-	//glReadPixels(0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT, GL_BGRA_EXT, GL_UNSIGNED_BYTE, bmBits);
-	//HGDIOBJ prevBitmap = SelectObject(memDC, memBM);
-	//BitBlt(hdc, 0, 0, PREVIEW_WIDTH, PREVIEW_HEIGHT, memDC, 0, 0, SRCCOPY);
-	//SelectObject(memDC, prevBitmap);
-	//DeleteObject(memBM);
-	//DeleteDC(memDC);
 }
 
 // GUIDの生成
-BOOL CreateGUID(OUT LPTSTR lpszGUID)
+inline BOOL CreateGUID(OUT LPTSTR lpszGUID)
 {
 	GUID guid = GUID_NULL;
 	HRESULT hr = UuidCreate(&guid);
@@ -283,7 +264,7 @@ BOOL CreateGUID(OUT LPTSTR lpszGUID)
 }
 
 // リソースをファイルに出力
-BOOL CreateFileFromResource(IN LPCTSTR lpszResourceName, IN LPCTSTR lpszResourceType,
+inline BOOL CreateFileFromResource(IN LPCTSTR lpszResourceName, IN LPCTSTR lpszResourceType,
 	IN LPCTSTR lpszResFileName)
 {
 	DWORD dwWritten;
@@ -308,7 +289,7 @@ BOOL CreateFileFromResource(IN LPCTSTR lpszResourceName, IN LPCTSTR lpszResource
 }
 
 // Tempフォルダにディレクトリを作成
-BOOL CreateTempDirectory(OUT LPTSTR pszDir)
+inline BOOL CreateTempDirectory(OUT LPTSTR pszDir)
 {
 	TCHAR szGUID[39];
 	if (GetTempPath(MAX_PATH, pszDir) == 0)return FALSE;
@@ -319,7 +300,7 @@ BOOL CreateTempDirectory(OUT LPTSTR pszDir)
 }
 
 // OpenGLの描画をH264形式として出力
-BOOL CreateH264(LPCTSTR lpszOutputFilePath, DWORD dwSecond)
+inline BOOL CreateH264(LPCTSTR lpszOutputFilePath, DWORD dwSecond)
 {
 	x264_param_t param;
 	x264_t* encoder;
@@ -379,7 +360,7 @@ BOOL CreateH264(LPCTSTR lpszOutputFilePath, DWORD dwSecond)
 }
 
 // FFMPEGを使ってH264形式の動画をMP4形式に変換
-BOOL Runffmpeg(LPCTSTR lpszffmpegFilePath, LPCTSTR lpszInputH264FilePath)
+inline BOOL Runffmpeg(LPCTSTR lpszffmpegFilePath, LPCTSTR lpszInputH264FilePath)
 {
 	PROCESS_INFORMATION pi = { 0 };
 	STARTUPINFO si = { 0 };
