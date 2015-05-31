@@ -40,6 +40,7 @@ const TCHAR szClassName[] = TEXT("Window");
 const GLfloat position[][2] = { { -1.f, -1.f }, { 1.f, -1.f }, { 1.f, 1.f }, { -1.f, 1.f } };
 const int vertices = sizeof position / sizeof position[0];
 const GLchar vsrc[] = "in vec4 position;void main(void){gl_Position = position;}";
+GLuint texture;
 
 // RGBå`éÆÇ©ÇÁYUVå`éÆÇ…ïœä∑
 int RGB2YUV(int x_dim, int y_dim, void *bmp, void *y_out, void *u_out, void *v_out)
@@ -225,12 +226,37 @@ inline BOOL InitGL(GLvoid)
 
 inline VOID DrawGLScene()
 {
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(-PREVIEW_WIDTH / 2.0f, PREVIEW_WIDTH / 2.0f, PREVIEW_HEIGHT / 2.0f, -PREVIEW_HEIGHT / 2.0f, -0.1, 0.1);
 	glUseProgram(program);
 	glUniform1f(glGetUniformLocation(program, "time"), GetTickCount() / 1000.0f);
-	glBindVertexArray(vao);
-	glDrawArrays(GL_QUADS, 0, vertices);
-	glBindVertexArray(0);
+
+	if (texture)
+	{
+		glEnable(GL_TEXTURE_2D);
+		glPushMatrix();
+		glTranslatef((GLfloat)0, (GLfloat)0, 0.0f);
+		glRotatef((GLfloat)0, 0, 0, 1.0f);
+		glScalef((GLfloat)1.0f, (GLfloat)1.0f, (GLfloat)1.0f);
+		glColor4f(1.0f, 1.0f, 1.0f, (GLfloat)1.0f);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glBegin(GL_POLYGON);
+		glTexCoord2f(0, 0); glVertex2f((GLfloat)(-PREVIEW_WIDTH / 2.0f), (GLfloat)(-PREVIEW_HEIGHT / 2.0f));
+		glTexCoord2f(0, 1); glVertex2f((GLfloat)(-PREVIEW_WIDTH / 2.0f), (GLfloat)(+PREVIEW_HEIGHT / 2.0f));
+		glTexCoord2f(1, 1); glVertex2f((GLfloat)(+PREVIEW_WIDTH / 2.0f), (GLfloat)(+PREVIEW_HEIGHT / 2.0f));
+		glTexCoord2f(1, 0); glVertex2f((GLfloat)(+PREVIEW_WIDTH / 2.0f), (GLfloat)(-PREVIEW_HEIGHT / 2.0f));
+		glEnd();
+		glPopMatrix();
+		glDisable(GL_TEXTURE_2D);
+	}
+	else
+	{
+		glBindVertexArray(vao);
+		glDrawArrays(GL_QUADS, 0, vertices);
+		glBindVertexArray(0);
+	}
 	glUseProgram(0);
 	glFlush();
 	SwapBuffers(hDC);
@@ -380,6 +406,28 @@ inline BOOL Runffmpeg(LPCTSTR lpszffmpegFilePath, LPCTSTR lpszInputH264FilePath)
 	return TRUE;
 }
 
+GLuint LoadImage(LPCTSTR lpszFilePath)
+{
+	GLuint texture = 0;
+	Gdiplus::Bitmap bitmap(lpszFilePath);
+	if (bitmap.GetLastStatus() == Gdiplus::Ok)
+	{
+		Gdiplus::BitmapData data;
+		bitmap.LockBits(0, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &data);
+		glGenTextures(1, &texture);
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glTexImage2D(GL_TEXTURE_2D,
+			0, GL_RGBA, data.Width, data.Height, 0, GL_BGRA_EXT, GL_UNSIGNED_BYTE, data.Scan0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		bitmap.UnlockBits(&data);
+	}
+	return texture;
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	static PIXELFORMATDESCRIPTOR pfd = { sizeof(PIXELFORMATDESCRIPTOR), 1,
@@ -433,12 +481,39 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			TEXT("	gl_FragColor = vec4(c*c / sin(time), c*c / 2, c*c, 1.0);\r\n")
 			TEXT("}\r\n")
 			);
+		DragAcceptFiles(hWnd, TRUE);
 		PostMessage(hWnd, WM_CREATED, 0, 0);
 		break;
 	case WM_CREATED:
 		SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(0, EN_CHANGE), (long)hEdit);
 		SendMessage(hEdit, EM_SETEVENTMASK, 0, (LPARAM)(SendMessage(hEdit, EM_GETEVENTMASK, 0, 0) | ENM_CHANGE));
 		SetFocus(hEdit);
+		break;
+	case WM_DROPFILES:
+		{
+			const HDROP hDrop = (HDROP)wParam;
+			TCHAR szFilePath[MAX_PATH];
+			DragQueryFile(hDrop, 0, szFilePath, sizeof(szFilePath));
+			LPCTSTR lpExt = PathFindExtension(szFilePath);
+			if (
+				PathMatchSpec(lpExt, TEXT("*.jpg")) ||
+				PathMatchSpec(lpExt, TEXT("*.jpeg")) ||
+				PathMatchSpec(lpExt, TEXT("*.gif")) ||
+				PathMatchSpec(lpExt, TEXT("*.png")) ||
+				PathMatchSpec(lpExt, TEXT("*.bmp")) ||
+				PathMatchSpec(lpExt, TEXT("*.tiff")) ||
+				PathMatchSpec(lpExt, TEXT("*.tif"))
+				)
+			{
+				if (texture)
+				{
+					glDeleteTextures(1, &texture);
+					texture = 0;
+				}
+				texture = LoadImage(szFilePath);
+			}
+			DragFinish(hDrop);
+		}
 		break;
 	case WM_SIZE:
 		MoveWindow(hEdit, PREVIEW_WIDTH + 20, 10, LOWORD(lParam) - PREVIEW_WIDTH - 30, HIWORD(lParam) - 20, 1);
@@ -500,7 +575,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						TCHAR szH264FilePath[MAX_PATH];
 						lstrcpy(szH264FilePath, szTempDirectoryPath);
 						PathAppend(szH264FilePath, TEXT("FILE.H264"));
-						if (CreateH264(szH264FilePath, 30))
+						if (CreateH264(szH264FilePath, 10)) // ç°ÇÕå≈íËÇ≈10ïbèoóÕ
 						{
 							Runffmpeg(szFFMpegFilePath, szH264FilePath);
 							DeleteFile(szH264FilePath);
@@ -520,7 +595,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		active = !HIWORD(wParam);
 		break;
 	case WM_DESTROY:
-		DeleteObject(hFont);
+		if (texture)
+		{
+			glDeleteTextures(1, &texture);
+			texture = 0;
+		}
 		if (program) glDeleteProgram(program);
 		if (vbo) glDeleteBuffers(1, &vbo);
 		if (vao) glDeleteVertexArrays(1, &vao);
@@ -531,6 +610,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		if (hDC) ReleaseDC(hStatic, hDC);
 		FreeLibrary(hRtLib);
+		DeleteObject(hFont);
 		PostQuitMessage(0);
 		break;
 	case WM_SYSCOMMAND:
