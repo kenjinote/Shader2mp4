@@ -229,12 +229,12 @@ inline VOID DrawGLScene()
 	glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(-PREVIEW_WIDTH / 2.0f, PREVIEW_WIDTH / 2.0f, PREVIEW_HEIGHT / 2.0f, -PREVIEW_HEIGHT / 2.0f, -0.1, 0.1);
 	glUseProgram(program);
 	glUniform1f(glGetUniformLocation(program, "time"), GetTickCount() / 1000.0f);
 
 	if (texture)
 	{
+		glOrtho(-PREVIEW_WIDTH / 2.0f, PREVIEW_WIDTH / 2.0f, PREVIEW_HEIGHT / 2.0f, -PREVIEW_HEIGHT / 2.0f, -0.1, 0.1);
 		glEnable(GL_TEXTURE_2D);
 		glPushMatrix();
 		glTranslatef((GLfloat)0, (GLfloat)0, 0.0f);
@@ -244,9 +244,9 @@ inline VOID DrawGLScene()
 		glBindTexture(GL_TEXTURE_2D, texture);
 		glBegin(GL_POLYGON);
 		glTexCoord2f(0, 0); glVertex2f((GLfloat)(-PREVIEW_WIDTH / 2.0f), (GLfloat)(-PREVIEW_HEIGHT / 2.0f));
-		glTexCoord2f(0, 1); glVertex2f((GLfloat)(-PREVIEW_WIDTH / 2.0f), (GLfloat)(+PREVIEW_HEIGHT / 2.0f));
-		glTexCoord2f(1, 1); glVertex2f((GLfloat)(+PREVIEW_WIDTH / 2.0f), (GLfloat)(+PREVIEW_HEIGHT / 2.0f));
-		glTexCoord2f(1, 0); glVertex2f((GLfloat)(+PREVIEW_WIDTH / 2.0f), (GLfloat)(-PREVIEW_HEIGHT / 2.0f));
+		glTexCoord2f(0, 1); glVertex2f((GLfloat)(-PREVIEW_WIDTH / 2.0f), (GLfloat)(PREVIEW_HEIGHT / 2.0f));
+		glTexCoord2f(1, 1); glVertex2f((GLfloat)(PREVIEW_WIDTH / 2.0f), (GLfloat)(PREVIEW_HEIGHT / 2.0f));
+		glTexCoord2f(1, 0); glVertex2f((GLfloat)(PREVIEW_WIDTH / 2.0f), (GLfloat)(-PREVIEW_HEIGHT / 2.0f));
 		glEnd();
 		glPopMatrix();
 		glDisable(GL_TEXTURE_2D);
@@ -386,7 +386,7 @@ inline BOOL CreateH264(LPCTSTR lpszOutputFilePath, DWORD dwSecond)
 }
 
 // FFMPEGを使ってH264形式の動画をMP4形式に変換
-inline BOOL Runffmpeg(LPCTSTR lpszffmpegFilePath, LPCTSTR lpszInputH264FilePath)
+inline BOOL OutputMP4fromH264(LPCTSTR lpszffmpegFilePath, LPCTSTR lpszInputH264FilePath, LPCTSTR lpszOutputFilePath)
 {
 	PROCESS_INFORMATION pi = { 0 };
 	STARTUPINFO si = { 0 };
@@ -398,7 +398,9 @@ inline BOOL Runffmpeg(LPCTSTR lpszffmpegFilePath, LPCTSTR lpszInputH264FilePath)
 	lstrcat(szCommand, lpszffmpegFilePath);
 	lstrcat(szCommand, TEXT("\" -y -i \""));
 	lstrcat(szCommand, lpszInputH264FilePath);
-	lstrcat(szCommand, TEXT("\" -vcodec copy -an file.mp4"));
+	lstrcat(szCommand, TEXT("\" -vcodec copy -an \""));
+	lstrcat(szCommand, lpszOutputFilePath);
+	lstrcat(szCommand, TEXT("\""));
 	CreateProcess(0, szCommand, 0, 0, 0, NORMAL_PRIORITY_CLASS, 0, 0, &si, &pi);
 	CloseHandle(pi.hThread);
 	WaitForSingleObject(pi.hProcess, INFINITE);
@@ -465,9 +467,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			!InitGL()) return -1;
 		SetWindowText(hEdit,
 			TEXT("#define pi 3.14159265358979\r\n")
+			TEXT("uniform sampler2D image;\r\n")
 			TEXT("uniform float time;\r\n")
 			TEXT("void main()\r\n")
 			TEXT("{\r\n")
+			TEXT("	vec2 texCoord = vec2(gl_FragCoord.x / 512, -gl_FragCoord.y / 384);\r\n")
+			TEXT("	vec4 col = texture2D(image, texCoord);\r\n")
 			TEXT("	vec2 p = gl_FragCoord;\r\n")
 			TEXT("	float c = 0.0;\r\n")
 			TEXT("	for (float i = 0.0; i < 5.0; i++)\r\n")
@@ -478,7 +483,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			TEXT("		);\r\n")
 			TEXT("		c += 16 / distance(p, b);\r\n")
 			TEXT("	}\r\n")
-			TEXT("	gl_FragColor = vec4(c*c / sin(time), c*c / 2, c*c, 1.0);\r\n")
+			TEXT("	gl_FragColor = col + c;\r\n")
 			TEXT("}\r\n")
 			);
 		DragAcceptFiles(hWnd, TRUE);
@@ -495,6 +500,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			TCHAR szFilePath[MAX_PATH];
 			DragQueryFile(hDrop, 0, szFilePath, sizeof(szFilePath));
 			LPCTSTR lpExt = PathFindExtension(szFilePath);
+			if (texture)
+			{
+				glDeleteTextures(1, &texture);
+				texture = 0;
+			}
 			if (
 				PathMatchSpec(lpExt, TEXT("*.jpg")) ||
 				PathMatchSpec(lpExt, TEXT("*.jpeg")) ||
@@ -505,11 +515,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				PathMatchSpec(lpExt, TEXT("*.tif"))
 				)
 			{
-				if (texture)
-				{
-					glDeleteTextures(1, &texture);
-					texture = 0;
-				}
 				texture = LoadImage(szFilePath);
 			}
 			DragFinish(hDrop);
@@ -577,7 +582,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						PathAppend(szH264FilePath, TEXT("FILE.H264"));
 						if (CreateH264(szH264FilePath, 10)) // 今は固定で10秒出力
 						{
-							Runffmpeg(szFFMpegFilePath, szH264FilePath);
+							OutputMP4fromH264(szFFMpegFilePath, szH264FilePath, szFileName);
 							DeleteFile(szH264FilePath);
 						}
 					}
