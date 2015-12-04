@@ -614,6 +614,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			wglDeleteContext(hRC);
 		}
 		if (hDC) ReleaseDC(hStatic, hDC);
+		DestroyWindow(hEdit);
 		FreeLibrary(hRtLib);
 		DeleteObject(hFont);
 		PostQuitMessage(0);
